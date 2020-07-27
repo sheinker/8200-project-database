@@ -82,11 +82,16 @@ class DBTable(db_api.DBTable):
         for record in criteria:
             self.delete_record(record)
 
-    def get_record(self, key: Any) -> Dict[str, Any]:
-        # if key is None or key not in table:
-        #     raise ValueError
-        # else:
-        # table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+    def get_record(self, key):
+        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+        if key is None or key not in table:
+            raise ValueError
+        else:
+            try:
+                value = table[key]
+            finally:
+                table.close()
+            return value
 
 
 
