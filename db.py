@@ -35,14 +35,14 @@ class DBTable(db_api.DBTable):
         self.key_field_name = key_field_name
 
         self.path_file = os.path.join('db_files', self.name + '.db')
-        table_file = shelve.open(self.path_file)
+        table = shelve.open(self.path_file)
         try:
             table_values = {}
             for field in fields:
                 table_values[fields] = ''
-            table_file[key_field_name] = table_values
+            table[key_field_name] = table_values
         finally:
-            table_file.close()
+            table.close()
 
     def count(self):
         table_file = shelve.open(os.path.join('db_files', self.name + '.db'))
@@ -66,23 +66,29 @@ class DBTable(db_api.DBTable):
                 table_file.close()
 
     def delete_record(self, key):
-        table_file = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
         try:
-            if key is None or key not in table_file:
+            if key is None or key not in table:
                 raise ValueError
             else:
-                table_file.pop(key)
+                table.pop(key)
         finally:
-            table_file.close()
+            table.close()
 
 
 
 
-    def delete_records(self, criteria: List[SelectionCriteria]):
-        raise NotImplementedError
+    def delete_records(self, criteria):
+        for record in criteria:
+            self.delete_record(record)
 
     def get_record(self, key: Any) -> Dict[str, Any]:
-        raise NotImplementedError
+        # if key is None or key not in table:
+        #     raise ValueError
+        # else:
+        # table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+
+
 
     def update_record(self, key: Any, values: Dict[str, Any]):
         raise NotImplementedError
