@@ -1,13 +1,20 @@
+import os
 import shelve
 import db_api
+from dataclasses import dataclass
+from dataclasses_json import dataclass_json
 
 
+@dataclass_json
+@dataclass
 class DBField(db_api.DBField):
     def __init__(self, name, type):
         self.name = name
         self.type = type
 
 
+@dataclass_json
+@dataclass
 class SelectionCriteria(db_api.SelectionCriteria):
     def __init__(self, field_name, operator, value):
         self.field_name = field_name
@@ -15,11 +22,19 @@ class SelectionCriteria(db_api.SelectionCriteria):
         self.value = value
 
 
+@dataclass_json
+@dataclass
 class DBTable(db_api.DBTable):
     def __init__(self, name, fields, key_field_name):
         self.name = name
         self.fields = fields
         self.key_field_name = key_field_name
+
+
+        self.path_file = os.path.join('db_files', self.name + '.db')
+        table_file = shelve.open(self.path_file)
+        print("ggg")
+        table_file.close()
 
     def count(self, record):
         return len(record.keys())
@@ -41,37 +56,40 @@ class DBTable(db_api.DBTable):
         raise NotImplementedError
 
 
+@dataclass_json
+@dataclass
 class DataBase(db_api.DataBase):
-    # Put here any instance information needed to support the API
+    tables: dict[str, DBTable]
+
     def create_table(self, table_name, fields, key_field_name):
-
-        value = {}
-        for field in fields:
-            value[field] = ''
-
-        path_file = os.path.join('db_files', table_name + '.db')
-        table_file = shelve.open(path_file)
-        # with shelve.open('data') as data:
-        #     data['key_field_name'] = value
-        table_file[key_field_name] = value
-        table_file.close()
+        if table_name not in self.tables:
+            self.tables[table_name] = DBTable(table_name, fields, key_field_name)
+            return self.tables[table_name]
+        else:
+            raise ValueError
 
     def num_tables(self):
-        raise NotImplementedError
+        return len(self.tables)
 
-    def get_table(self, table_name: str) -> DBTable:
-        raise NotImplementedError
+    def get_table(self, table_name):
+        return self.tables.get(table_name)
 
-    def delete_table(self, table_name: str) -> None:
-        raise NotImplementedError
+    def delete_table(self, table_name):
+        if table_name in self.tables:
+            os.remove(db_api.DB_ROOT.joinpath(f"{table_name}.dir"))
+            self.tables.pop(table_name)
+        else:
+            raise ValueError
 
-    def get_tables_names(self) -> List[Any]:
-        raise NotImplementedError
+    def get_tables_names(self):
+        return list(self.tables.keys())
 
-    def query_multiple_tables(
-            self,
-            tables: List[str],
-            fields_and_values_list: List[List[SelectionCriteria]],
-            fields_to_join_by: List[str]
-    ) -> List[Dict[str, Any]]:
-        raise NotImplementedError
+
+
+    # def query_multiple_tables(
+    #         self,
+    #         tables: List[str],
+    #         fields_and_values_list: List[List[SelectionCriteria]],
+    #         fields_to_join_by: List[str]
+    # ) -> List[Dict[str, Any]]:
+    #     raise NotImplementedError
