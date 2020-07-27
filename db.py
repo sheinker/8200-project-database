@@ -7,8 +7,6 @@ from typing import Any, Dict, List, Type
 from pathlib import Path
 
 
-
-
 @dataclass_json
 @dataclass
 class DBField(db_api.DBField):
@@ -75,28 +73,35 @@ class DBTable(db_api.DBTable):
         finally:
             table.close()
 
-
-
-
     def delete_records(self, criteria):
         for record in criteria:
             self.delete_record(record)
 
     def get_record(self, key):
-        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
-        if key is None or key not in table:
+        if key is None:
             raise ValueError
-        else:
-            try:
+        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+        try:
+            if key not in table:
+                raise ValueError
+            else:
                 value = table[key]
-            finally:
                 table.close()
-            return value
+                return value
+        finally:
+            table.close()
 
-
-
-    def update_record(self, key: Any, values: Dict[str, Any]):
-        raise NotImplementedError
+    def update_record(self, key: Any, values):
+        if key is None:
+            raise ValueError
+        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+        try:
+            if key not in table:
+                raise ValueError
+            else:
+                table[key] = values
+        finally:
+            table.close()
 
 
 @dataclass_json
