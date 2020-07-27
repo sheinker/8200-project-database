@@ -66,7 +66,17 @@ class DBTable(db_api.DBTable):
                 table_file.close()
 
     def delete_record(self, key):
-        self.remove(key)
+        table_file = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+        try:
+            if key is None or key not in table_file:
+                raise ValueError
+            else:
+                table_file.pop(key)
+        finally:
+            table_file.close()
+
+
+
 
     def delete_records(self, criteria: List[SelectionCriteria]):
         raise NotImplementedError
