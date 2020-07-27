@@ -74,8 +74,19 @@ class DBTable(db_api.DBTable):
             table.close()
 
     def delete_records(self, criteria):
-        for record in criteria:
-            self.delete_record(record)
+        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+        try:
+            for cond in criteria:
+                for item in table:
+                    if table[item][cond.field_name] + cond.operator + cond.value:
+                        self.delete_record(item)
+        finally:
+            table.close()
+
+
+
+
+
 
     def get_record(self, key):
         if key is None:
