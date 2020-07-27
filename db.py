@@ -3,6 +3,10 @@ import shelve
 import db_api
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
+from typing import Any, Dict, List, Type
+from pathlib import Path
+
+
 
 
 @dataclass_json
@@ -30,17 +34,36 @@ class DBTable(db_api.DBTable):
         self.fields = fields
         self.key_field_name = key_field_name
 
-
         self.path_file = os.path.join('db_files', self.name + '.db')
         table_file = shelve.open(self.path_file)
-        print("ggg")
-        table_file.close()
+        try:
+            table_values = {}
+            for field in fields:
+                table_values[fields] = ''
+            table_file[key_field_name] = table_values
+        finally:
+            table_file.close()
 
-    def count(self, record):
-        return len(record.keys())
+    def count(self):
+        table_file = shelve.open(os.path.join('db_files', self.name + '.db'))
+        try:
+            count_rows = len(table_file.keys())
+        finally:
+            table_file.close()
+        return count_rows
 
     def insert_record(self, values: Dict[str, Any]):
-        raise NotImplementedError
+        if values is None or len(values) > len(self.fields) or values[self.key_field_name] is None:
+            raise ValueError
+        else:
+            table_file = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+            try:
+                if table_file[values[self.key_field_name]]:
+                    table_file.close()
+                else:
+                    table_file[values[self.key_field_name]] = values
+            finally:
+                table_file.close()
 
     def delete_record(self, key):
         self.remove(key)
@@ -52,14 +75,13 @@ class DBTable(db_api.DBTable):
         raise NotImplementedError
 
     def update_record(self, key: Any, values: Dict[str, Any]):
-        s = shelve.open(path, writeback=True)
         raise NotImplementedError
 
 
 @dataclass_json
 @dataclass
 class DataBase(db_api.DataBase):
-    tables: dict[str, DBTable]
+    tables: Dict[str, DBTable]
 
     def create_table(self, table_name, fields, key_field_name):
         if table_name not in self.tables:
@@ -84,7 +106,8 @@ class DataBase(db_api.DataBase):
     def get_tables_names(self):
         return list(self.tables.keys())
 
-
+    def query_multiple_tables(self, tables, fields_and_values_list, fields_to_join_by):
+        pass
 
     # def query_multiple_tables(
     #         self,
