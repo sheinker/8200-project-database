@@ -1,5 +1,6 @@
 import os
 import shelve
+import csv
 from abc import ABC
 
 import db_api
@@ -7,7 +8,16 @@ from dataclasses import dataclass
 from dataclasses_json import dataclass_json
 from typing import Any, Dict, List, Type
 from pathlib import Path
-
+import operator
+operators = {
+    '<': operator.lt,
+    '<=': operator.le,
+    '==': operator.eq,
+    '=': operator.eq,
+    '!=': operator.ne,
+    '>=': operator.ge,
+    '>': operator.gt
+}
 
 @dataclass_json
 @dataclass
@@ -38,12 +48,6 @@ class DBTable(db_api.DBTable):
 
         path_file = os.path.join('db_files', self.name)
         table = shelve.open(path_file)
-        # try:
-        #     table_values = {}
-        #     for field in fields:
-        #         table_values[fields] = ''
-        #     table[str(key_field_name)] = table_values
-        # finally:
         table.close()
 
     def count(self):
@@ -68,13 +72,15 @@ class DBTable(db_api.DBTable):
             table.close()
 
     def delete_record(self, key):
-        if key is not None:
-            table = shelve.open(os.path.join('db_files', self.name), writeback=True)
-            try:
-                if str(key) in table:
-                    del table[str(key)]
-            finally:
-                table.close()
+        if key is None:
+            raise ValueError
+        table = shelve.open(os.path.join('db_files', self.name), writeback=True)
+        try:
+            if str(key) not in table:
+                raise ValueError
+            del table[str(key)]
+        finally:
+            table.close()
 
     def delete_records(self, criteria):
         table = shelve.open(os.path.join('db_files', self.name), writeback=True)
@@ -82,10 +88,11 @@ class DBTable(db_api.DBTable):
             for key in table:
                 condition = ""
                 for cond in criteria:
-                    if cond.operator == "=":
-                        cond.operator = "=="
-                    condition += str(table[key][cond.field_name]) + cond.operator + str(cond.value) + " and "
-
+                    str_operator = operators.get(cond.operator)
+                    if cond.field_name == self.key_field_name:
+                        condition += str(str_operator(key, str(cond.value))) + " and "
+                    else:
+                        condition += str(str_operator(str(table[key][cond.field_name]), str(cond.value))) + " and "
                 if eval(condition[:-4]):
                     del table[key]
         finally:
@@ -117,9 +124,23 @@ class DBTable(db_api.DBTable):
         finally:
             table.close()
 
-    def query_table(self, criteria: List[SelectionCriteria]) \
-            -> List[Dict[str, Any]]:
-        raise NotImplementedError
+    def query_table(self, criteria: List[SelectionCriteria]):
+        table = shelve.open(os.path.join('db_files', self.name), writeback=True)
+        satisfies_cond = {}
+        list_satisfies_cond = []
+        try:
+            for key in table:
+                condition = ""
+                for cond in criteria:
+                    str_operator = operators.get(cond.operator)
+                    condition += str(str_operator(str(table[key][cond.field_name]), str(cond.value))) + " and "
+                if eval(condition[:-4]):
+                    satisfies_cond[self.key_field_name] = key
+                    satisfies_cond.update(table[key])
+                    list_satisfies_cond.append(satisfies_cond)
+        finally:
+            table.close()
+        return list_satisfies_cond
 
     def create_index(self, field_to_index: str) -> None:
         raise NotImplementedError
@@ -134,9 +155,17 @@ class DataBase(db_api.DataBase):
     def __init__(self):
         self.tables = {}
 
+        db_file = shelve.open('DB', writeback=True)
+        for key in db_file:
+            self.tables[key] = DBTable(key, db_file[key][0], db_file[key][1])
+
     def create_table(self, table_name, fields, key_field_name):
         if table_name not in self.tables:
             self.tables[table_name] = DBTable(table_name, fields, key_field_name)
+
+            with shelve.open('DB', writeback=True) as db:
+                db[table_name] = [fields, key_field_name]
+
             return self.tables[table_name]
         else:
             raise ValueError("bad index")
