@@ -1,5 +1,7 @@
 import os
 import shelve
+from abc import ABC
+
 import db_api
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
@@ -28,75 +30,76 @@ class SelectionCriteria(db_api.SelectionCriteria):
 @dataclass
 class DBTable(db_api.DBTable):
     def __init__(self, name, fields, key_field_name):
+        if key_field_name not in [field.name for field in fields]:
+            raise ValueError
         self.name = name
         self.fields = fields
         self.key_field_name = key_field_name
 
-        self.path_file = os.path.join('db_files', self.name + '.db')
-        table = shelve.open(self.path_file)
-        try:
-            table_values = {}
-            for field in fields:
-                table_values[fields] = ''
-            table[key_field_name] = table_values
-        finally:
-            table.close()
+        path_file = os.path.join('db_files', self.name)
+        table = shelve.open(path_file)
+        # try:
+        #     table_values = {}
+        #     for field in fields:
+        #         table_values[fields] = ''
+        #     table[str(key_field_name)] = table_values
+        # finally:
+        table.close()
 
     def count(self):
-        table_file = shelve.open(os.path.join('db_files', self.name + '.db'))
+        table_file = shelve.open(os.path.join('db_files', self.name))
         try:
             count_rows = len(table_file.keys())
         finally:
             table_file.close()
         return count_rows
 
-    def insert_record(self, values: Dict[str, Any]):
+    def insert_record(self, values):
         if values is None or len(values) > len(self.fields) or values[self.key_field_name] is None:
-            raise ValueError
-        else:
-            table_file = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
-            try:
-                if table_file[values[self.key_field_name]]:
-                    table_file.close()
-                else:
-                    table_file[values[self.key_field_name]] = values
-            finally:
-                table_file.close()
+            raise ValueError("bad index")
+        table = shelve.open(os.path.join('db_files', self.name), writeback=True)
+        try:
+            if table.get(str(values[self.key_field_name])):
+                table.close()
+                raise ValueError("already exist")
+            else:
+                table[str(values[self.key_field_name])] = values
+        finally:
+            table.close()
 
     def delete_record(self, key):
-        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
-        try:
-            if key is None or key not in table:
-                raise ValueError
-            else:
-                table.pop(key)
-        finally:
-            table.close()
+        if key is not None:
+            table = shelve.open(os.path.join('db_files', self.name), writeback=True)
+            try:
+                if str(key) in table:
+                    del table[str(key)]
+            finally:
+                table.close()
 
     def delete_records(self, criteria):
-        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+        table = shelve.open(os.path.join('db_files', self.name), writeback=True)
         try:
-            for cond in criteria:
-                for item in table:
-                    if table[item][cond.field_name] + cond.operator + cond.value:
-                        self.delete_record(item)
+            for key in table:
+                condition = ""
+                for cond in criteria:
+                    if cond.operator == "=":
+                        cond.operator = "=="
+                    condition += str(table[key][cond.field_name]) + cond.operator + str(cond.value) + " and "
+
+                if eval(condition[:-4]):
+                    del table[key]
         finally:
             table.close()
-
-
-
-
-
 
     def get_record(self, key):
         if key is None:
-            raise ValueError
-        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+            raise ValueError("bad index")
+        table = shelve.open(os.path.join('db_files', self.name), writeback=True)
         try:
-            if key not in table:
-                raise ValueError
+            if str(key) not in table:
+                raise ValueError("bad index")
             else:
-                value = table[key]
+                value = table[str(key)]
                 table.close()
                 return value
         finally:
@@ -104,33 +107,46 @@ class DBTable(db_api.DBTable):
 
     def update_record(self, key: Any, values):
         if key is None:
-            raise ValueError
-        table = shelve.open(os.path.join('db_files', self.name + '.db'), writeback=True)
+            raise ValueError("bad index")
+        table = shelve.open(os.path.join('db_files', self.name), writeback=True)
         try:
-            if key not in table:
-                raise ValueError
+            if str(key) not in table:
+                raise ValueError("bad index")
             else:
-                table[key] = values
+                table[str(key)] = values
         finally:
             table.close()
+
+    def query_table(self, criteria: List[SelectionCriteria]) \
+            -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def create_index(self, field_to_index: str) -> None:
+        raise NotImplementedError
+
+
 
 
 @dataclass_json
 @dataclass
 class DataBase(db_api.DataBase):
-    tables: Dict[str, DBTable]
+
+    def __init__(self):
+        self.tables = {}
 
     def create_table(self, table_name, fields, key_field_name):
         if table_name not in self.tables:
             self.tables[table_name] = DBTable(table_name, fields, key_field_name)
             return self.tables[table_name]
         else:
-            raise ValueError
+            raise ValueError("bad index")
 
     def num_tables(self):
         return len(self.tables)
 
     def get_table(self, table_name):
+        if table_name not in self.tables:
+            raise ValueError("bad index")
         return self.tables.get(table_name)
 
     def delete_table(self, table_name):
@@ -138,7 +154,7 @@ class DataBase(db_api.DataBase):
             os.remove(db_api.DB_ROOT.joinpath(f"{table_name}.dir"))
             self.tables.pop(table_name)
         else:
-            raise ValueError
+            raise ValueError("bad index")
 
     def get_tables_names(self):
         return list(self.tables.keys())
