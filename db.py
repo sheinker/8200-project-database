@@ -1,7 +1,5 @@
 import os
 import shelve
-import csv
-from abc import ABC
 
 import db_api
 from dataclasses import dataclass
@@ -142,10 +140,17 @@ class DBTable(db_api.DBTable):
             table.close()
         return list_satisfies_cond
 
-    def create_index(self, field_to_index: str) -> None:
-        raise NotImplementedError
-
-
+    def create_index(self, field_to_index):
+        if field_to_index not in [field.name for field in self.fields]:
+            raise ValueError
+        if field_to_index == self.key_field_name:
+            return
+        with shelve.open(f'{self.name}_{field_to_index}_index', writeback=True) as index_file:
+            table = shelve.open(os.path.join('db_files', self.name), writeback=True)
+            all_instances = {}
+            for key, value in table.items():
+                all_instances.setdefault(value[field_to_index], set()).add(key)
+            index_file[field_to_index] = all_instances
 
 
 @dataclass_json
